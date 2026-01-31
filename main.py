@@ -64,7 +64,7 @@ def load_config():
             config['TTS_VOICE'] = settings.get("tts_voice", "en-US-AriaNeural")
             config['BACKGROUND_MUSIC'] = settings.get("background_music_path", "assets/background_music/default.mp3")
             config['OLLAMA_BASE_URL'] = settings.get("ollama_base_url", "http://localhost:11434")
-            config['OLLAMA_MODEL'] = settings.get("ollama_model", "llama3")
+            config['OLLAMA_MODEL'] = settings.get("ollama_model", "kimi-k2.5")
     else:
         # Defaults (use local options)
         config['ART_STYLE'] = "minimalist geometric"
@@ -75,14 +75,14 @@ def load_config():
         config['TTS_VOICE'] = "en-US-AriaNeural"
         config['BACKGROUND_MUSIC'] = "assets/background_music/default.mp3"
         config['OLLAMA_BASE_URL'] = "http://localhost:11434"
-        config['OLLAMA_MODEL'] = "llama3"
+        config['OLLAMA_MODEL'] = "kimi-k2.5"
 
     # Parse resolution
     width, height = map(int, config['OUTPUT_RESOLUTION'].split('x'))
     config['RESOLUTION'] = (width, height)
 
     # Check for Ollama model from env
-    config['OLLAMA_MODEL'] = os.getenv("OLLAMA_MODEL", config.get('OLLAMA_MODEL', 'llama3'))
+    config['OLLAMA_MODEL'] = os.getenv("OLLAMA_MODEL", config.get('OLLAMA_MODEL', 'kimi-k2.5'))
     config['OLLAMA_BASE_URL'] = os.getenv("OLLAMA_BASE_URL", config.get('OLLAMA_BASE_URL', 'http://localhost:11434'))
 
     return config

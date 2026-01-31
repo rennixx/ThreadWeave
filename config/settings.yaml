@@ -39,3 +39,7 @@ background_music_path: "assets/background_music/default.mp3"
 enable_gpu: true
 gpu_memory_fraction: 0.9
 enable_xformers: true
+
+# Local LLM (Ollama)
+ollama_base_url: http://localhost:11434
+ollama_model: kimi-k2.5
