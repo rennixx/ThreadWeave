@@ -22,12 +22,12 @@ moviepy==1.0.3
 # Progress bars
 tqdm==4.66.2
 
-# AI/ML - Image Generation
-torch==2.1.2
-torchvision==0.17.2
-diffusers==0.27.0
-transformers==4.37.2
-accelerate==0.27.0
+# AI/ML - Image Generation (use latest for Python 3.12+)
+torch>=2.2.0
+torchvision>=0.17.0
+diffusers>=0.27.0
+transformers>=4.37.0
+accelerate>=0.27.0
 
 # Optional: Speed optimizations
 # xformers  # Install separately if compatible with your CUDA version
