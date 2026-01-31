@@ -82,6 +82,7 @@ logs/
 ehthumbs.db
 Thumbs.db
 desktop.ini
+/.claude/
 
 # Testing
 .pytest_cache/
