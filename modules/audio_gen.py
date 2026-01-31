@@ -198,6 +198,9 @@ class AudioGenerator:
         if self.tts_provider == "openai" and self.client:
             return self._generate_openai_tts(text, duration)
 
+        elif self.tts_provider == "edge":
+            return self._generate_edge_tts(text, duration)
+
         elif self.tts_provider == "elevenlabs" and self.client:
             return self._generate_elevenlabs_tts(text, duration)
 
@@ -248,6 +251,50 @@ class AudioGenerator:
 
         except Exception as e:
             logger.error(f"OpenAI TTS failed: {e}")
+            raise
+
+    def _generate_edge_tts(self, text: str, target_duration: float) -> AudioSegment:
+        """Generate speech using Edge TTS (free Microsoft TTS)."""
+        import asyncio
+
+        async def generate_edge_audio():
+            communicate = edge_tts.Communicate(text, self.voice)
+            temp_path = "temp_tts_edge.mp3"
+
+            await communicate.save(temp_path)
+            return temp_path
+
+        try:
+            # Run async function
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            temp_path = loop.run_until_complete(generate_edge_audio())
+            loop.close()
+
+            audio = AudioSegment.from_mp3(temp_path)
+            os.remove(temp_path)
+
+            # Edge TTS doesn't support speed adjustment, so we adjust after generation
+            actual_duration = len(audio) / 1000
+
+            if abs(actual_duration - target_duration) > 0.5:
+                if actual_duration < target_duration:
+                    # Too short, slow it down
+                    ratio = actual_duration / target_duration
+                    audio = audio._spawn(audio.raw_data, overrides={
+                        "frame_rate": int(audio.frame_rate * ratio)
+                    }).set_frame_rate(audio.frame_rate)
+                else:
+                    # Too long, speed it up
+                    ratio = min(actual_duration / target_duration, 1.5)
+                    audio = audio._spawn(audio.raw_data, overrides={
+                        "frame_rate": int(audio.frame_rate / ratio)
+                    }).set_frame_rate(audio.frame_rate)
+
+            return audio
+
+        except Exception as e:
+            logger.error(f"Edge TTS failed: {e}")
             raise
 
     def _generate_elevenlabs_tts(self, text: str, target_duration: float) -> AudioSegment:
