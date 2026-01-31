@@ -9,6 +9,7 @@ import os
 from typing import Optional
 
 from openai import OpenAI
+import edge_tts
 from pydub import AudioSegment
 from pydub.generators import Sine
 from tqdm import tqdm
