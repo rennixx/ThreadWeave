@@ -12,7 +12,13 @@ from unittest.mock import Mock, MagicMock, patch
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.image_gen import ImageGenerator
+# Try to import, handle missing dependencies
+try:
+    from modules.image_gen import ImageGenerator
+    DEPS_AVAILABLE = True
+except ImportError as e:
+    DEPS_AVAILABLE = False
+    IMPORT_ERROR = str(e)
 
 
 def test_device_detection():
