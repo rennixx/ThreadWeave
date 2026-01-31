@@ -60,32 +60,46 @@ def load_config():
             config['DEFAULT_DURATION'] = settings.get("default_duration", 30)
             config['OUTPUT_RESOLUTION'] = settings.get("output_resolution", "1080x1920")
             config['VIDEO_FPS'] = settings.get("video_fps", 30)
-            config['TTS_PROVIDER'] = settings.get("tts_provider", "openai")
-            config['TTS_VOICE'] = settings.get("tts_voice", "alloy")
+            config['TTS_PROVIDER'] = settings.get("tts_provider", "edge")
+            config['TTS_VOICE'] = settings.get("tts_voice", "en-US-AriaNeural")
             config['BACKGROUND_MUSIC'] = settings.get("background_music_path", "assets/background_music/default.mp3")
+            config['OLLAMA_BASE_URL'] = settings.get("ollama_base_url", "http://localhost:11434")
+            config['OLLAMA_MODEL'] = settings.get("ollama_model", "llama3")
     else:
-        # Defaults
+        # Defaults (use local options)
         config['ART_STYLE'] = "minimalist geometric"
         config['DEFAULT_DURATION'] = 30
         config['OUTPUT_RESOLUTION'] = "1080x1920"
         config['VIDEO_FPS'] = 30
-        config['TTS_PROVIDER'] = "openai"
-        config['TTS_VOICE'] = "alloy"
+        config['TTS_PROVIDER'] = "edge"
+        config['TTS_VOICE'] = "en-US-AriaNeural"
         config['BACKGROUND_MUSIC'] = "assets/background_music/default.mp3"
+        config['OLLAMA_BASE_URL'] = "http://localhost:11434"
+        config['OLLAMA_MODEL'] = "llama3"
 
     # Parse resolution
     width, height = map(int, config['OUTPUT_RESOLUTION'].split('x'))
     config['RESOLUTION'] = (width, height)
+
+    # Check for Ollama model from env
+    config['OLLAMA_MODEL'] = os.getenv("OLLAMA_MODEL", config.get('OLLAMA_MODEL', 'llama3'))
+    config['OLLAMA_BASE_URL'] = os.getenv("OLLAMA_BASE_URL", config.get('OLLAMA_BASE_URL', 'http://localhost:11434'))
 
     return config
 
 
 def validate_config(config: dict) -> None:
     """Validate required configuration values."""
-    if not config['OPENAI_KEY'] and not config['ANTHROPIC_KEY']:
+    # Check if we have any LLM option available
+    has_api_key = config['OPENAI_KEY'] or config['ANTHROPIC_KEY']
+    has_ollama = True  # Assume Ollama is available if user sets it up
+
+    if not has_api_key and not has_ollama:
         raise ValueError(
-            "OPENAI_API_KEY or ANTHROPIC_API_KEY must be set in .env file. "
-            "Required for scene generation and TTS."
+            "No LLM option available. Set one of:\n"
+            "  - OPENAI_API_KEY (for Openai)\n"
+            "  - ANTHROPIC_API_KEY (for Claude)\n"
+            "  - Or install Ollama for local LLM (see https://ollama.ai)"
         )
 
     if not config['TWITTER_TOKEN']:
