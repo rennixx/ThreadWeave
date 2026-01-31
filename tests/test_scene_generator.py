@@ -258,7 +258,7 @@ def test_parse_response():
         },
         {
             "name": "Text before JSON",
-            "response': 'Here is the result: {"metadata": {"scene_count": 1}, "scenes": []}',
+            "response": 'Here is the result: {"metadata": {"scene_count": 1}, "scenes": []}',
             "should_pass": True
         },
         {
