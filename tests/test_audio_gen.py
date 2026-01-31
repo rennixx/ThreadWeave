@@ -13,7 +13,11 @@ import subprocess
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Check for ffmpeg
-FFMPEG_AVAILABLE = subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode == 0
+try:
+    result = subprocess.run(["ffmpeg", "-version"], capture_output=True, shell=False)
+    FFMPEG_AVAILABLE = result.returncode == 0
+except FileNotFoundError:
+    FFMPEG_AVAILABLE = False
 
 if FFMPEG_AVAILABLE:
     from modules.audio_gen import AudioGenerator
@@ -342,6 +346,15 @@ def run_all_tests():
     print("\n" + "="*60)
     print("AUDIO GENERATOR - RUNNING ALL TESTS")
     print("="*60)
+
+    if not FFMPEG_AVAILABLE or AudioGenerator is None:
+        print("\n  SKIPPED: ffmpeg not installed")
+        print("\n  To install ffmpeg:")
+        print("    Windows: choco install ffmpeg")
+        print("    Or download from: https://ffmpeg.org/download.html")
+        print("\n  ffmpeg is required for audio processing (pydub)")
+        print("="*60)
+        return
 
     # Run tests that don't require API
     test_config_loading()
