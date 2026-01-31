@@ -1,0 +1,41 @@
+# Video Settings
+output_resolution: "1080x1920"  # vertical for TikTok/Reels
+video_fps: 30
+video_bitrate: "8M"
+audio_bitrate: "192k"
+
+# Art Style
+art_style: "minimalist geometric shapes, flat design, pastel color palette, clean vector illustration, simple composition, modern corporate style"
+
+# Scene Generation
+default_duration: 30  # seconds
+min_scenes: 6
+max_scenes: 10
+scene_min_duration: 2.0
+scene_max_duration: 5.0
+
+# Image Generation
+image_model: "stabilityai/sdxl-turbo"
+image_steps: 6
+image_cfg_scale: 2.0
+image_resolution: [768, 1024]  # width, height
+use_consistent_seed: true
+base_seed: 42
+
+# Animation
+enable_camera_movements: true
+transition_duration: 0.5  # seconds
+
+# Audio
+audio_volume_narration: 0  # dB
+audio_volume_music: -22  # dB
+tts_provider: "openai"  # or "elevenlabs" or "local"
+tts_voice: "alloy"  # for OpenAI TTS
+
+# Paths
+background_music_path: "assets/background_music/default.mp3"
+
+# Performance
+enable_gpu: true
+gpu_memory_fraction: 0.9
+enable_xformers: true

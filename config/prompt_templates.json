@@ -1,0 +1,15 @@
+{
+  "scene_generation": {
+    "system_prompt": "You are a creative director converting social media threads into animated video scripts. You excel at visual storytelling and creating engaging, concise narratives.",
+
+    "user_prompt_template": "Convert the following Twitter thread into a {target_duration}-second animated video script.\n\nTHREAD CONTENT:\n{thread_text}\n\nART STYLE: {art_style}\n\nCreate a JSON response with this exact structure:\n{\n  \"metadata\": {\n    \"art_style\": \"{art_style}\",\n    \"total_duration\": {target_duration},\n    \"scene_count\": <number>\n  },\n  \"scenes\": [\n    {\n      \"scene_number\": 1,\n      \"duration\": 3.5,\n      \"visual_description\": \"detailed description of what to show using the art style\",\n      \"narration_text\": \"what the narrator says\",\n      \"camera_movement\": \"static | zoom_in | zoom_out | pan_left | pan_right\"\n    }\n  ]\n}\n\nRULES:\n1. Create 6-10 scenes total\n2. Each scene should be 2-5 seconds\n3. Total duration should equal {target_duration} seconds (±3 seconds acceptable)\n4. Visual descriptions MUST use consistent style keywords from the art_style\n5. For geometric/abstract styles: describe shapes, colors, and spatial relationships\n6. Narration should capture the thread's key insights in a natural, engaging tone\n7. Use camera movements purposefully (don't overuse zoom)\n8. Ensure scene progression tells a coherent story\n\nRespond with ONLY the JSON, no additional text.",
+
+    "retry_prompt": "The previous response was not valid JSON. Please provide ONLY a valid JSON response with no markdown formatting, no code blocks, and no additional text. Use the exact structure specified."
+  },
+
+  "image_generation": {
+    "positive_prompt_template": "{visual_description}, {art_style}, consistent style, professional illustration, clean composition, cinematic lighting, high quality, sharp focus, detailed, aesthetic",
+
+    "negative_prompt": "blurry, distorted, inconsistent style, multiple styles, text, watermark, signature, low quality, artifacts, deformed, ugly, bad anatomy, duplicate, cropped, worst quality, jpeg artifacts"
+  }
+}

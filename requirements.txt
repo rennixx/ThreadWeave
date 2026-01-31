@@ -1,0 +1,33 @@
+# Core dependencies
+python-dotenv==1.0.0
+pyyaml==6.0.1
+requests==2.31.0
+
+# Twitter/X API
+tweepy==4.14.0
+
+# LLM APIs
+openai==1.12.0
+anthropic==0.18.1
+
+# Image Processing
+Pillow==10.2.0
+numpy==1.26.4
+
+# Video Processing
+opencv-python==4.9.0.80
+pydub==0.25.1
+moviepy==1.0.3
+
+# Progress bars
+tqdm==4.66.2
+
+# AI/ML - Image Generation
+torch==2.1.2
+torchvision==0.17.2
+diffusers==0.27.0
+transformers==4.37.2
+accelerate==0.27.0
+
+# Optional: Speed optimizations
+# xformers  # Install separately if compatible with your CUDA version
