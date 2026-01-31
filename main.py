@@ -271,8 +271,13 @@ def main(
         # Step 5: Generate Audio
         print_step(5, total_steps, "Generating audio...")
 
+        # Determine TTS API key (only needed for OpenAI, ElevenLabs)
+        tts_key = None
+        if config['TTS_PROVIDER'] in ['openai', 'elevenlabs']:
+            tts_key = config.get('OPENAI_KEY') or config.get('ELEVENLABS_KEY')
+
         audio_gen = AudioGenerator(
-            tts_api_key=config['OPENAI_KEY'],
+            tts_api_key=tts_key,
             tts_provider=config['TTS_PROVIDER'],
             voice=config['TTS_VOICE']
         )
