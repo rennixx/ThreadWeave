@@ -289,6 +289,16 @@ def run_all_tests():
     print("IMAGE GENERATOR - RUNNING ALL TESTS")
     print("="*60)
 
+    if not DEPS_AVAILABLE:
+        print("\n  SKIPPED: Required dependencies not installed")
+        print(f"  Error: {IMPORT_ERROR}")
+        print("\n  To install dependencies:")
+        print("    pip install torch torchvision diffusers transformers accelerate")
+        print("\n  For CUDA support, install PyTorch with CUDA:")
+        print("    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+        print("="*60)
+        return
+
     # Run tests that don't require GPU
     test_device_detection()
     test_config_loading()
