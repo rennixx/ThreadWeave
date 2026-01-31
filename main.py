@@ -195,11 +195,31 @@ def main(
         # Step 2: Generate Scene Script
         print_step(2, total_steps, "Generating scene script...")
 
-        # Determine which LLM to use
-        llm_provider = "openai" if config['OPENAI_KEY'] else "anthropic"
-        llm_key = config['OPENAI_KEY'] if config['OPENAI_KEY'] else config['ANTHROPIC_KEY']
+        # Determine which LLM to use (prefer local Ollama, then API keys)
+        if os.getenv("OLLAMA_MODEL") or os.path.exists(config.get('OLLAMA_BASE_URL', '')):
+            # Prefer Ollama if available
+            llm_provider = "ollama"
+            llm_key = None
+            llm_base_url = config['OLLAMA_BASE_URL']
+            print(f"  Using Ollama ({config['OLLAMA_MODEL']}) at {llm_base_url}")
+        elif config['OPENAI_KEY']:
+            llm_provider = "openai"
+            llm_key = config['OPENAI_KEY']
+            llm_base_url = None
+            print(f"  Using OpenAI GPT")
+        elif config['ANTHROPIC_KEY']:
+            llm_provider = "anthropic"
+            llm_key = config['ANTHROPIC_KEY']
+            llm_base_url = None
+            print(f"  Using Anthropic Claude")
+        else:
+            # Default to Ollama
+            llm_provider = "ollama"
+            llm_key = None
+            llm_base_url = config['OLLAMA_BASE_URL']
+            print(f"  Using Ollama ({config['OLLAMA_MODEL']}) at {llm_base_url}")
 
-        scene_gen = SceneGenerator(api_key=llm_key, provider=llm_provider)
+        scene_gen = SceneGenerator(api_key=llm_key, provider=llm_provider, base_url=llm_base_url)
         scene_script = scene_gen.generate_scenes(
             thread_data,
             art_style=config['ART_STYLE'],
