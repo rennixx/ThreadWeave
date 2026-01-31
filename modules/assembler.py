@@ -374,7 +374,7 @@ class VideoAssembler:
         """
         Create a horizontal (16:9) version from vertical video.
 
-        Pads the sides with black bars.
+        Pads the sides with black bars (letterboxing).
 
         Args:
             vertical_path: Path to vertical (9:16) video
@@ -388,12 +388,14 @@ class VideoAssembler:
 
         # Target: 1920x1080 (16:9)
         # Input: 1080x1920 (9:16)
-        # Strategy: Scale to fit height, then pad sides
+        # Strategy: Scale video to fit within 1080 height, then pad sides to 1920 width
+        # Scale: 1080x1920 -> ~607x1080 (maintains aspect ratio)
+        # Pad: Add black bars on sides to reach 1920x1080
 
         cmd = [
             'ffmpeg',
             '-i', vertical_path,
-            '-vf', 'scale=1080:-1,pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+            '-vf', 'scale=-1:1080,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
             '-c:a', 'copy',
             '-y',
             output_path

@@ -313,18 +313,19 @@ def test_horizontal_conversion():
 
         assert os.path.exists(result_path), "Horizontal video should exist"
 
-        # Check resolution
+        # Check resolution (should be 1920x1080 for horizontal)
         info = assembler.get_video_info(result_path)
         resolution = info.get('resolution', (0, 0))
 
-        if resolution == (1920, 1080) or resolution == (1080, 1920):  # Some implementations differ
+        if resolution == (1920, 1080):
             print(f"  PASS: Horizontal version created")
-            print(f"    Resolution: {resolution}")
+            print(f"    Resolution: {resolution} (16:9)")
             print(f"    Duration: {info.get('duration', 'unknown'):.2f}s")
+            return True
         else:
             print(f"  WARN: Unexpected resolution: {resolution}")
-
-        return True
+            print(f"    Expected: (1920, 1080)")
+            return False
 
     except Exception as e:
         print(f"  FAIL: {str(e)}")
