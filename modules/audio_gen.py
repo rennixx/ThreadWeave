@@ -21,22 +21,24 @@ class AudioGenerator:
     """
     Generates audio narration using TTS and mixes with background music.
 
-    Supports OpenAI TTS API and local fallbacks.
+    Supports OpenAI TTS, Edge TTS (free), ElevenLabs, and local TTS.
     """
 
     def __init__(
         self,
         tts_api_key: Optional[str] = None,
-        tts_provider: str = "openai",
-        voice: str = "alloy"
+        tts_provider: str = "edge",
+        voice: str = "en-US-AriaNeural"
     ):
         """
         Initialize the audio generator.
 
         Args:
-            tts_api_key: API key for TTS service (if needed)
-            tts_provider: "openai", "elevenlabs", or "local"
-            voice: Voice name (for OpenAI: alloy, echo, fable, onyx, nova, shimmer)
+            tts_api_key: API key for TTS service (not needed for Edge TTS)
+            tts_provider: "openai", "edge", "elevenlabs", or "local"
+            voice: Voice name
+                - OpenAI: alloy, echo, fable, onyx, nova, shimmer
+                - Edge TTS: en-US-AriaNeural, en-US-GuyNeural, en-GB-SoniaNeural, etc.
         """
         self.tts_provider = tts_provider.lower()
         self.voice = voice
@@ -57,6 +59,9 @@ class AudioGenerator:
             else:
                 self.client = OpenAI(api_key=tts_api_key)
                 logger.info(f"AudioGenerator initialized with OpenAI TTS (voice: {voice})")
+        elif self.tts_provider == "edge":
+            # Edge TTS doesn't need initialization
+            logger.info(f"AudioGenerator initialized with Edge TTS (voice: {voice})")
         elif self.tts_provider == "elevenlabs":
             if not tts_api_key:
                 logger.warning("ElevenLabs API key not provided")
