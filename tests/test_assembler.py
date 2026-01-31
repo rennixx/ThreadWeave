@@ -90,6 +90,14 @@ def test_method_availability():
         print("  SKIPPED: VideoAssembler not available")
         return
 
+    if not MOVIEPY_AVAILABLE and not FFMPEG_AVAILABLE:
+        print("  SKIPPED: Neither moviepy nor ffmpeg available")
+        print("  Install with:")
+        print("    pip install moviepy")
+        print("    # OR")
+        print("    winget install ffmpeg")
+        return
+
     assembler = VideoAssembler(fps=30, resolution=(1080, 1920))
 
     print(f"  moviepy available: {assembler.moviepy_available}")
@@ -338,6 +346,16 @@ def run_all_tests():
 
     if not ASSEMBLER_AVAILABLE:
         print("\n  SKIPPED: VideoAssembler not available")
+        return
+
+    if not MOVIEPY_AVAILABLE and not FFMPEG_AVAILABLE:
+        print("\n  SKIPPED: Neither moviepy nor ffmpeg available")
+        print("\n  To enable video assembly, install one of:")
+        print("    pip install moviepy")
+        print("    # OR")
+        print("    winget install ffmpeg")
+        print("  Then restart your terminal.")
+        print("="*60)
         return
 
     # Run tests
