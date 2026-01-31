@@ -29,8 +29,8 @@ transition_duration: 0.5  # seconds
 # Audio
 audio_volume_narration: 0  # dB
 audio_volume_music: -22  # dB
-tts_provider: "openai"  # or "elevenlabs" or "local"
-tts_voice: "alloy"  # for OpenAI TTS
+tts_provider: "edge"  # or "openai", "elevenlabs", "local"
+tts_voice: "en-US-AriaNeural"  # for Edge TTS (free)
 
 # Paths
 background_music_path: "assets/background_music/default.mp3"

@@ -13,6 +13,7 @@ from typing import Optional
 import yaml
 from openai import OpenAI
 from anthropic import Anthropic
+from ollama import Client as OllamaClient
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -25,19 +26,21 @@ class SceneGenerator:
     """
     Generates video scene scripts from Twitter thread content using LLMs.
 
-    Supports OpenAI GPT and Anthropic Claude APIs.
+    Supports OpenAI GPT, Anthropic Claude, and Ollama (local LLM).
     """
 
-    def __init__(self, api_key: str, provider: str = "openai"):
+    def __init__(self, api_key: Optional[str] = None, provider: str = "openai", base_url: str = None):
         """
         Initialize the scene generator.
 
         Args:
-            api_key: API key for the LLM provider
-            provider: "openai" or "anthropic"
+            api_key: API key for the LLM provider (not needed for Ollama)
+            provider: "openai", "anthropic", or "ollama"
+            base_url: Base URL for Ollama (default: http://localhost:11434)
         """
         self.api_key = api_key
         self.provider = provider.lower()
+        self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         self.client = None
         self.model = None
 
@@ -46,15 +49,23 @@ class SceneGenerator:
 
         # Initialize client
         if self.provider == "openai":
+            if not api_key:
+                raise ValueError("OpenAI API key is required for provider 'openai'")
             self.client = OpenAI(api_key=api_key)
             self.model = "gpt-4o"  # or "gpt-4-turbo"
             logger.info(f"SceneGenerator initialized with OpenAI ({self.model})")
         elif self.provider == "anthropic":
+            if not api_key:
+                raise ValueError("Anthropic API key is required for provider 'anthropic'")
             self.client = Anthropic(api_key=api_key)
             self.model = "claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet
             logger.info(f"SceneGenerator initialized with Anthropic ({self.model})")
+        elif self.provider == "ollama":
+            self.client = OllamaClient(host=self.base_url)
+            self.model = os.getenv("OLLAMA_MODEL", "llama3")
+            logger.info(f"SceneGenerator initialized with Ollama ({self.model} at {self.base_url})")
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Use 'openai' or 'anthropic'.")
+            raise ValueError(f"Unsupported provider: {provider}. Use 'openai', 'anthropic', or 'ollama'.")
 
     def _load_prompt_template(self) -> None:
         """Load prompt template from config file."""
@@ -213,6 +224,21 @@ class SceneGenerator:
                 ]
             )
             return response.content[0].text
+
+        elif self.provider == "ollama":
+            # Ollama uses a different API format
+            response = self.client.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                options={
+                    "temperature": 0.7,
+                    "num_predict": 4000
+                }
+            )
+            return response["message"]["content"]
 
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
