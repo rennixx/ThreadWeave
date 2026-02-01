@@ -4,8 +4,8 @@ video_fps: 30
 video_bitrate: "8M"
 audio_bitrate: "192k"
 
-# Art Style
-art_style: "minimalist geometric shapes, flat design, pastel color palette, clean vector illustration, simple composition, modern corporate style"
+# Art Style (optimized for social media thread videos)
+art_style: "watercolor painting, soft flowing organic shapes, gentle gradients, layered translucent washes, dreamy atmosphere, pastel color palette, elegant brush strokes"
 
 # Scene Generation
 default_duration: 30  # seconds
@@ -15,15 +15,18 @@ scene_min_duration: 2.0
 scene_max_duration: 5.0
 
 # Image Generation
-image_model: "stabilityai/sdxl-turbo"
-image_steps: 6
-image_cfg_scale: 2.0
+image_model: "sd-blue/sdxl-lightning-4step"  # Faster 4-step model
+image_steps: 4  # SDXL Lightning uses 4 steps
+image_cfg_scale: 0.0  # Lightning uses 0 CFG scale
 image_resolution: [768, 1024]  # width, height
 use_consistent_seed: true
 base_seed: 42
+use_torch_compile: true  # Enable torch.compile for 2-3x speedup (CUDA only)
 
 # Animation
 enable_camera_movements: true
+enable_frame_interpolation: true  # Enable frame interpolation for smoother animation
+interpolation_frames: 12  # Frames to interpolate between keyframes
 transition_duration: 0.5  # seconds
 
 # Audio

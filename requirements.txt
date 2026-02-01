@@ -33,6 +33,7 @@ torchvision>=0.17.0
 diffusers>=0.27.0
 transformers>=4.37.0
 accelerate>=0.27.0
+huggingface-hub>=0.20.0  # For model caching
 
 # Optional: Speed optimizations
 # xformers  # Install separately if compatible with your CUDA version

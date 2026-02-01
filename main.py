@@ -291,17 +291,30 @@ def main(
         # Step 4: Create Animations
         print_step(4, total_steps, "Creating animations...")
 
+        # Check if interpolation is enabled
+        use_interpolation = config.get("enable_frame_interpolation", True)
+
         animator = Animator(
             fps=config['VIDEO_FPS'],
-            resolution=config['RESOLUTION']
+            resolution=config['RESOLUTION'],
+            enable_interpolation=use_interpolation
         )
 
         clips_dir = f"output/clips/{thread_id}"
-        clip_paths = animator.animate_scenes(
-            scene_script,
-            image_paths,
-            output_dir=clips_dir
-        )
+
+        if use_interpolation:
+            print(f"  Using frame interpolation for smoother animation")
+            clip_paths = animator.animate_scenes_with_interpolation(
+                scene_script,
+                image_paths,
+                output_dir=clips_dir
+            )
+        else:
+            clip_paths = animator.animate_scenes(
+                scene_script,
+                image_paths,
+                output_dir=clips_dir
+            )
 
         print(f"  [OK] Created {len(clip_paths)} animated clips")
 

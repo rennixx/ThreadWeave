@@ -1,7 +1,8 @@
 """
 Image Generator Module
 
-Generates scene images using Stable Diffusion XL or Z.AI API.
+Generates scene images using Stable Diffusion XL Lightning or Z.AI API.
+Optimized for speed with model caching and torch.compile.
 """
 
 import json
@@ -15,11 +16,16 @@ import requests
 from PIL import Image
 from diffusers import (
     StableDiffusionXLPipeline,
-    DPMSolverMultistepScheduler
+    DPMSolverMultistepScheduler,
+    EulerAncestralDiscreteScheduler
 )
 from tqdm import tqdm
+from huggingface_hub import snapshot_download
 
 logger = logging.getLogger(__name__)
+
+# Cache directory for models
+MODELS_CACHE_DIR = os.path.expanduser("~/.cache/huggingface/hub")
 
 
 class ImageGenerator:
@@ -29,11 +35,13 @@ class ImageGenerator:
 
     def __init__(
         self,
-        model_name: str = "stabilityai/sdxl-turbo",
+        model_name: str = "sd-blue/sdxl-lightning-4step",
         device: Optional[str] = None,
         use_api: bool = False,
         api_key: Optional[str] = None,
-        api_provider: str = "zai"
+        api_provider: str = "zai",
+        use_torch_compile: bool = True,
+        cache_dir: str = None
     ):
         """
         Initialize the image generator.
@@ -44,6 +52,8 @@ class ImageGenerator:
             use_api: Use API-based generation instead of local model
             api_key: API key for the service
             api_provider: "zai" for Z.AI image generation
+            use_torch_compile: Enable torch.compile for faster inference (CUDA only)
+            cache_dir: Custom cache directory for models
         """
         self.model_name = model_name
         self.device = self._detect_device(device)
@@ -51,6 +61,15 @@ class ImageGenerator:
         self.use_api = use_api
         self.api_key = api_key
         self.api_provider = api_provider
+        self.use_torch_compile = use_torch_compile and self.device == "cuda"
+        self.cache_dir = cache_dir or os.path.join(os.getcwd(), "models", "cached")
+        self.model_loaded = False
+
+        # Ensure cache directory exists
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+        # Set HuggingFace cache environment
+        os.environ['HUGGINGFACE_HUB_CACHE'] = self.cache_dir
 
         self._load_config()
 
@@ -80,11 +99,12 @@ class ImageGenerator:
         config_path = "config/settings.yaml"
 
         default_config = {
-            "image_steps": 6,
-            "image_cfg_scale": 2.0,
+            "image_steps": 4,  # SDXL Lightning uses 4 steps
+            "image_cfg_scale": 0.0,  # Lightning uses 0 CFG scale
             "image_resolution": [768, 1024],
             "use_consistent_seed": True,
-            "base_seed": 42
+            "base_seed": 42,
+            "use_torch_compile": True
         }
 
         if os.path.exists(config_path):
@@ -110,26 +130,36 @@ class ImageGenerator:
         """
         Load the Stable Diffusion model (for local generation only).
 
-        This is done separately to allow control over when the model is loaded.
+        Uses model caching to avoid re-downloading. Enables torch.compile for speed.
         """
         if self.use_api:
             logger.info("API mode enabled, skipping local model load")
             return
 
+        if self.model_loaded:
+            logger.info("Model already loaded, skipping...")
+            return
+
         logger.info(f"Loading model: {self.model_name}")
 
         try:
+            # Check if model is cached locally
+            local_model_path = self._get_cached_model_path()
+
             # Load the pipeline
             self.pipeline = StableDiffusionXLPipeline.from_pretrained(
-                self.model_name,
+                local_model_path if local_model_path else self.model_name,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 use_safetensors=True,
-                variant="fp16" if self.device == "cuda" else None
+                variant="fp16" if self.device == "cuda" else None,
+                cache_dir=self.cache_dir,
+                local_files_only=local_model_path is not None
             )
 
-            # Set scheduler
-            self.pipeline.scheduler = DPMSolverMultistepScheduler.from_config(
-                self.pipeline.scheduler.config
+            # Set scheduler for Lightning (Euler Ancestral with specific settings)
+            self.pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(
+                self.pipeline.scheduler.config,
+                timestep_spacing="trailing"
             )
 
             # Move to device
@@ -147,11 +177,52 @@ class ImageGenerator:
                 # Enable attention slicing for memory efficiency
                 self.pipeline.enable_attention_slicing()
 
+                # Enable VAE slicing to reduce memory
+                self.pipeline.enable_vae_slicing()
+
+                # Apply torch.compile for faster inference (2-3x speedup)
+                if self.use_torch_compile:
+                    try:
+                        logger.info("Applying torch.compile for faster inference...")
+                        # Compile only the UNet for best performance/memory tradeoff
+                        self.pipeline.unet = torch.compile(
+                            self.pipeline.unet,
+                            mode="reduce-overhead",
+                            fullgraph=False
+                        )
+                        logger.info("torch.compile applied successfully")
+                    except Exception as e:
+                        logger.warning(f"torch.compile failed: {e}. Continuing without compile.")
+
+            self.model_loaded = True
             logger.info("Model loaded successfully")
 
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise
+
+    def _get_cached_model_path(self) -> Optional[str]:
+        """
+        Check if model is cached locally and return the path.
+
+        Returns:
+            Local path to cached model or None if not cached
+        """
+        # Try to find the model in the cache directory
+        model_folder_name = self.model_name.replace("--", "/").replace("/", "--")
+        cache_path = os.path.join(self.cache_dir, f"models--{model_folder_name}")
+
+        if os.path.exists(cache_path):
+            # Find the snapshot folder (usually named like 'snapshots/<hash>')
+            snapshots_dir = os.path.join(cache_path, "snapshots")
+            if os.path.exists(snapshots_dir):
+                snapshots = [d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))]
+                if snapshots:
+                    # Return the most recent snapshot
+                    latest_snapshot = sorted(snapshots)[-1]
+                    return os.path.join(snapshots_dir, latest_snapshot)
+
+        return None
 
     def _generate_via_api(self, prompt: str, negative_prompt: str = "") -> Image.Image:
         """
@@ -228,11 +299,11 @@ class ImageGenerator:
 
     def _generate_via_local(self, prompt: str, negative_prompt: str = "", seed: Optional[int] = None) -> Image.Image:
         """
-        Generate an image using local Stable Diffusion model.
+        Generate an image using local Stable Diffusion XL Lightning model.
 
         Args:
             prompt: Text description for image generation
-            negative_prompt: Things to avoid in the image
+            negative_prompt: Things to avoid in the image (not used by Lightning)
             seed: Random seed for reproducibility
 
         Returns:
@@ -249,13 +320,16 @@ class ImageGenerator:
         if seed is not None:
             generator = torch.Generator(device=self.device).manual_seed(seed)
 
+        # For Lightning, we use a specific prompt format and no negative prompt
+        # Lightning is trained with 0 CFG scale, so we ignore negative_prompt
+        lightning_prompt = prompt
+
         # Generate
-        logger.info(f"Generating locally: {prompt[:50]}...")
+        logger.info(f"Generating locally (Lightning 4-step): {prompt[:50]}...")
         result = self.pipeline(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
+            prompt=lightning_prompt,
             num_inference_steps=self.steps,
-            guidance_scale=self.cfg_scale,
+            guidance_scale=self.cfg_scale,  # 0 for Lightning
             height=self.resolution[1],
             width=self.resolution[0],
             generator=generator
@@ -353,6 +427,7 @@ class ImageGenerator:
         if self.pipeline:
             del self.pipeline
             self.pipeline = None
+            self.model_loaded = False
 
             # Clear CUDA cache
             if self.device == "cuda":
