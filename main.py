@@ -412,11 +412,11 @@ Environment variables (.env file):
         sys.exit(0)
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[WARNING] Interrupted by user")
         sys.exit(1)
 
     except Exception as e:
-        print(f"\n❌ Error: {str(e)}")
+        print(f"\n[ERROR] Error: {str(e)}")
         if args.verbose:
             import traceback
             traceback.print_exc()
