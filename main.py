@@ -331,19 +331,19 @@ def main(
         file_size_mb = video_info.get('file_size', 0) / (1024 * 1024)
 
         print(f"\n{'=' * 60}")
-        print(f"✅ VIDEO GENERATED SUCCESSFULLY!")
+        print(f"VIDEO GENERATED SUCCESSFULLY!")
         print(f"{'=' * 60}")
-        print(f"📁 Output: {final_video_path}")
-        print(f"⏱️  Duration: {video_info.get('duration', 0):.2f} seconds")
-        print(f"📦 Size: {file_size_mb:.2f} MB")
-        print(f"🎨 Resolution: {video_info.get('resolution', config['RESOLUTION'])}")
+        print(f"Output: {final_video_path}")
+        print(f"Duration: {video_info.get('duration', 0):.2f} seconds")
+        print(f"Size: {file_size_mb:.2f} MB")
+        print(f"Resolution: {video_info.get('resolution', config['RESOLUTION'])}")
         print(f"{'=' * 60}")
 
         return final_video_path
 
     except KeyboardInterrupt:
         logger.info("Pipeline interrupted by user")
-        print("\n⚠️  Pipeline interrupted by user")
+        print("\n[WARNING] Pipeline interrupted by user")
         raise
 
     except Exception as e:
