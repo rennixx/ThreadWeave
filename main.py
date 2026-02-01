@@ -139,7 +139,7 @@ def main(
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    print("🎬 ThreadWeave - Thread-to-Video Generator")
+    print("ThreadWeave - Thread-to-Video Generator")
     print("=" * 60)
 
     # Load and validate config
@@ -190,7 +190,7 @@ def main(
         thread_path = f"output/threads/{thread_id}.json"
         scraper.save_thread(thread_data, thread_path)
 
-        print(f"  ✅ Extracted {thread_data.get('tweet_count', 0)} tweets from {thread_data.get('author', 'unknown')}")
+        print(f"  [OK] Extracted {thread_data.get('tweet_count', 0)} tweets from {thread_data.get('author', 'unknown')}")
 
         # Step 2: Generate Scene Script
         print_step(2, total_steps, "Generating scene script...")
