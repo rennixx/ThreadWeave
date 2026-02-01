@@ -26,7 +26,7 @@ class SceneGenerator:
     """
     Generates video scene scripts from Twitter thread content using LLMs.
 
-    Supports OpenAI GPT, Anthropic Claude, and Ollama (local LLM).
+    Supports OpenAI GPT, Anthropic Claude, Ollama (local LLM), and Z.AI.
     """
 
     def __init__(self, api_key: Optional[str] = None, provider: str = "openai", base_url: str = None):
@@ -35,8 +35,8 @@ class SceneGenerator:
 
         Args:
             api_key: API key for the LLM provider (not needed for Ollama)
-            provider: "openai", "anthropic", or "ollama"
-            base_url: Base URL for Ollama (default: http://localhost:11434)
+            provider: "openai", "anthropic", "ollama", or "zai"
+            base_url: Base URL for Ollama or custom endpoints
         """
         self.api_key = api_key
         self.provider = provider.lower()
@@ -52,20 +52,30 @@ class SceneGenerator:
             if not api_key:
                 raise ValueError("OpenAI API key is required for provider 'openai'")
             self.client = OpenAI(api_key=api_key)
-            self.model = "gpt-4o"  # or "gpt-4-turbo"
+            self.model = "gpt-4o"
             logger.info(f"SceneGenerator initialized with OpenAI ({self.model})")
         elif self.provider == "anthropic":
             if not api_key:
                 raise ValueError("Anthropic API key is required for provider 'anthropic'")
             self.client = Anthropic(api_key=api_key)
-            self.model = "claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet
+            self.model = "claude-3-5-sonnet-20241022"
             logger.info(f"SceneGenerator initialized with Anthropic ({self.model})")
         elif self.provider == "ollama":
             self.client = OllamaClient(host=self.base_url)
             self.model = os.getenv("OLLAMA_MODEL", "llama3")
             logger.info(f"SceneGenerator initialized with Ollama ({self.model} at {self.base_url})")
+        elif self.provider == "zai":
+            if not api_key:
+                raise ValueError("Z.AI API key is required for provider 'zai'")
+            # Z.AI is OpenAI-compatible
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.z.ai/api/paas/v4/"
+            )
+            self.model = "glm-4.7"
+            logger.info(f"SceneGenerator initialized with Z.AI ({self.model})")
         else:
-            raise ValueError(f"Unsupported provider: {provider}. Use 'openai', 'anthropic', or 'ollama'.")
+            raise ValueError(f"Unsupported provider: {provider}. Use 'openai', 'anthropic', 'ollama', or 'zai'.")
 
     def _load_prompt_template(self) -> None:
         """Load prompt template from config file."""
@@ -170,13 +180,33 @@ class SceneGenerator:
 
                 return scene_data
 
-            except json.JSONDecodeError as e:
-                logger.warning(f"Attempt {attempt + 1}: Invalid JSON - {e}")
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Attempt {attempt + 1}: {e}")
 
                 if attempt < max_retries - 1:
-                    # Retry with retry prompt
-                    logger.info("Retrying with retry prompt...")
-                    prompt = self.retry_prompt
+                    # Retry with a simpler, more direct prompt
+                    logger.info("Retrying with simplified prompt...")
+                    prompt = f"""You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanations.
+
+Create a 30-second video script with this structure:
+{{
+  "metadata": {{
+    "art_style": "{art_style}",
+    "total_duration": 30,
+    "scene_count": 8
+  }},
+  "scenes": [
+    {{
+      "scene_number": 1,
+      "duration": 3.5,
+      "visual_description": "A peaceful landscape with watercolor style",
+      "narration_text": "The journey begins",
+      "camera_movement": "static"
+    }}
+  ]
+}}
+
+Thread to convert: {thread_text[:200]}"""
                 else:
                     raise RuntimeError(
                         f"Failed to generate valid JSON after {max_retries} attempts"
@@ -201,7 +231,8 @@ class SceneGenerator:
         Returns:
             str: LLM response text
         """
-        if self.provider == "openai":
+        if self.provider in ["openai", "zai"]:
+            # Both OpenAI and Z.AI use the same API format
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -270,7 +301,7 @@ class SceneGenerator:
         """
         Parse JSON from LLM response.
 
-        Handles common issues like markdown code blocks.
+        Handles common issues like markdown code blocks, control characters, and malformed JSON.
 
         Args:
             response_text: Raw LLM response
@@ -281,10 +312,14 @@ class SceneGenerator:
         Raises:
             json.JSONDecodeError: If JSON is invalid
         """
+        # Remove control characters that can break JSON parsing
+        import re
+        response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)
+
         # Remove markdown code blocks if present
         response_text = response_text.strip()
 
-        # Look for JSON in code blocks
+        # Look for JSON in code blocks (more flexible regex)
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             response_text = json_match.group(1)
@@ -300,7 +335,35 @@ class SceneGenerator:
             if end_idx != -1:
                 response_text = response_text[:end_idx + 1]
 
-        return json.loads(response_text)
+        # Try parsing with standard JSON
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            # Fallback: try to fix common JSON issues
+            # Try to find the complete JSON by matching braces
+            try:
+                import json5
+                return json5.loads(response_text)
+            except ImportError:
+                # Manual brace matching to extract valid JSON
+                brace_count = 0
+                json_start = -1
+                for i, char in enumerate(response_text):
+                    if char == '{':
+                        if brace_count == 0:
+                            json_start = i
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0 and json_start != -1:
+                            # Found complete JSON object
+                            candidate = response_text[json_start:i+1]
+                            try:
+                                return json.loads(candidate)
+                            except:
+                                continue
+                # If all else fails, raise the original error
+                return json.loads(response_text)
 
     def _validate_scene_data(self, scene_data: dict, target_duration: int) -> None:
         """

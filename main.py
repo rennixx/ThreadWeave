@@ -50,6 +50,7 @@ def load_config():
     config['OPENAI_KEY'] = os.getenv("OPENAI_API_KEY")
     config['ANTHROPIC_KEY'] = os.getenv("ANTHROPIC_API_KEY")
     config['ELEVENLABS_KEY'] = os.getenv("ELEVENLABS_API_KEY")
+    config['ZAI_KEY'] = os.getenv("ZAI_API_KEY")
 
     # Load settings.yaml
     settings_path = "config/settings.yaml"
@@ -91,12 +92,13 @@ def load_config():
 def validate_config(config: dict) -> None:
     """Validate required configuration values."""
     # Check if we have any LLM option available
-    has_api_key = config['OPENAI_KEY'] or config['ANTHROPIC_KEY']
+    has_api_key = config['OPENAI_KEY'] or config['ANTHROPIC_KEY'] or config['ZAI_KEY']
     has_ollama = True  # Assume Ollama is available if user sets it up
 
     if not has_api_key and not has_ollama:
         raise ValueError(
             "No LLM option available. Set one of:\n"
+            "  - ZAI_API_KEY (recommended - fast and affordable)\n"
             "  - OPENAI_API_KEY (for Openai)\n"
             "  - ANTHROPIC_API_KEY (for Claude)\n"
             "  - Or install Ollama for local LLM (see https://ollama.ai)"
@@ -219,19 +221,22 @@ def main(
         # Step 2: Generate Scene Script
         print_step(2, total_steps, "Generating scene script...")
 
-        # Determine which LLM to use (prefer local Ollama, then API keys)
-        if os.getenv("OLLAMA_MODEL") or os.path.exists(config.get('OLLAMA_BASE_URL', '')):
-            # Prefer Ollama if available
-            llm_provider = "ollama"
-            llm_key = None
-            llm_base_url = config['OLLAMA_BASE_URL']
-            print(f"  Using Ollama ({config['OLLAMA_MODEL']}) at {llm_base_url}")
-        elif config['OPENAI_KEY']:
+        # Helper to check if a key is valid (not empty/placeholder)
+        def is_valid_key(key):
+            return key and not key.startswith("your_") and not key.startswith("your_")
+
+        # Determine which LLM to use (priority: Z.AI > OpenAI > Anthropic > Ollama)
+        if is_valid_key(config.get('ZAI_KEY')):
+            llm_provider = "zai"
+            llm_key = config['ZAI_KEY']
+            llm_base_url = None
+            print(f"  Using Z.AI (glm-4.7)")
+        elif is_valid_key(config.get('OPENAI_KEY')):
             llm_provider = "openai"
             llm_key = config['OPENAI_KEY']
             llm_base_url = None
             print(f"  Using OpenAI GPT")
-        elif config['ANTHROPIC_KEY']:
+        elif is_valid_key(config.get('ANTHROPIC_KEY')):
             llm_provider = "anthropic"
             llm_key = config['ANTHROPIC_KEY']
             llm_base_url = None
@@ -259,10 +264,18 @@ def main(
         # Step 3: Generate Images
         print_step(3, total_steps, "Generating scene images...")
 
+        # Use Z.AI API if key is available, otherwise use local model
+        use_api_images = config.get('ZAI_KEY') is not None
         image_gen = ImageGenerator(
             model_name="stabilityai/sdxl-turbo",
-            device="cuda"  # Will auto-detect if CUDA not available
+            device="cuda",  # Will auto-detect if CUDA not available
+            use_api=use_api_images,
+            api_key=config.get('ZAI_KEY'),
+            api_provider="zai"
         )
+
+        if use_api_images:
+            print(f"  Using Z.AI API for image generation")
 
         images_dir = f"output/images/{thread_id}"
         image_paths = image_gen.generate_scene_images(
