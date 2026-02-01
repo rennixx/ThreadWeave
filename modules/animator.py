@@ -2,6 +2,7 @@
 Animator Module
 
 Creates video clips with camera movements and frame interpolation from static images.
+Can also use advanced AI models (AnimateDiff, SVD) for true frame-by-frame animation.
 """
 
 import logging
@@ -14,8 +15,26 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+# Try to import video generation module
+try:
+    from modules.video_gen import VideoGenerator
+    VIDEO_GEN_AVAILABLE = True
+except ImportError:
+    VIDEO_GEN_AVAILABLE = False
+    logger.warning("VideoGenerator module not available, using basic animation")
+
 
 class Animator:
+    """
+    Creates animated video clips from static images with camera movements.
+
+    Supports:
+    - Basic zoom/pan effects using OpenCV
+    - Advanced frame-by-frame animation using AnimateDiff/SVD (if available)
+    """
+
+    VALID_MOVEMENTS = ["static", "zoom_in", "zoom_out", "pan_left", "pan_right"]
+    AI_MODELS = ["animatediff", "svd"]
     """
     Creates animated video clips from static images with camera movements.
 
@@ -25,7 +44,8 @@ class Animator:
     VALID_MOVEMENTS = ["static", "zoom_in", "zoom_out", "pan_left", "pan_right"]
 
     def __init__(self, fps: int = 30, resolution: Tuple[int, int] = (1080, 1920),
-                 enable_interpolation: bool = True, interpolation_frames: int = 12):
+                 enable_interpolation: bool = True, interpolation_frames: int = 12,
+                 ai_model: Optional[str] = None, use_ai: bool = False):
         """
         Initialize the animator.
 
@@ -34,12 +54,26 @@ class Animator:
             resolution: (width, height) tuple for output resolution
             enable_interpolation: Enable frame interpolation for smoother animation
             interpolation_frames: Number of interpolated frames between keyframes
+            ai_model: AI model to use ("animatediff" or "svd")
+            use_ai: Whether to use AI models for animation
         """
         self.fps = fps
         self.resolution = resolution
         self.enable_interpolation = enable_interpolation
         self.interpolation_frames = interpolation_frames
-        logger.info(f"Animator initialized: {fps} FPS, resolution={resolution}, interpolation={enable_interpolation}")
+        self.use_ai = use_ai and VIDEO_GEN_AVAILABLE
+        self.ai_model = ai_model if ai_model in self.AI_MODELS else "svd"
+        self.video_gen = None
+
+        if self.use_ai:
+            try:
+                self.video_gen = VideoGenerator(model_type=self.ai_model)
+                logger.info(f"Animator using AI model: {self.ai_model}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize AI model: {e}. Falling back to basic animation.")
+                self.use_ai = False
+        else:
+            logger.info(f"Animator initialized: {fps} FPS, resolution={resolution}, interpolation={enable_interpolation}")
 
     def animate_scenes(
         self,
@@ -592,3 +626,78 @@ class Animator:
             "resolution": (width, height),
             "file_size": file_size
         }
+
+    def animate_scenes_with_ai(
+        self,
+        scene_script: dict,
+        image_paths: list[str],
+        output_dir: str
+    ) -> list[str]:
+        """
+        Create animated clips using AI models (AnimateDiff or SVD) for true frame-by-frame animation.
+
+        Args:
+            scene_script: Scene script JSON from scene_generator
+            image_paths: List of image file paths (one per scene)
+            output_dir: Directory to save video clips
+
+        Returns:
+            list: Paths to generated video clips
+        """
+        if not self.use_ai or not self.video_gen:
+            raise RuntimeError("AI animation not available. Initialize with use_ai=True")
+
+        if not scene_script or "scenes" not in scene_script:
+            raise ValueError("Invalid scene_script: missing 'scenes'")
+
+        scenes = scene_script["scenes"]
+
+        if len(scenes) != len(image_paths):
+            raise ValueError(
+                f"Scene count mismatch: {len(scenes)} scenes vs {len(image_paths)} images"
+            )
+
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
+
+        logger.info(f"Creating {len(scenes)} animated clips using {self.ai_model.upper()}...")
+
+        # Load the AI model
+        self.video_gen.load_model()
+
+        clip_paths = []
+
+        for scene, image_path in zip(tqdm(scenes, desc="Generating AI animations"), image_paths):
+            if not os.path.exists(image_path):
+                raise FileNotFoundError(f"Image not found: {image_path}")
+
+            scene_num = scene.get("scene_number", len(clip_paths) + 1)
+            duration = scene.get("duration", 3.0)
+            output_path = os.path.join(output_dir, f"scene_{scene_num:02d}.mp4")
+
+            # Generate video using AI model
+            if self.ai_model == "svd":
+                self.video_gen.generate_video_from_image(
+                    image_path=image_path,
+                    output_path=output_path,
+                    duration=duration,
+                    fps=self.fps
+                )
+            else:  # animatediff
+                # For AnimateDiff, we'd need prompts from the scene
+                # For now, fall back to using SVD
+                self.video_gen.generate_video_from_image(
+                    image_path=image_path,
+                    output_path=output_path,
+                    duration=duration,
+                    fps=self.fps
+                )
+
+            clip_paths.append(output_path)
+
+        logger.info(f"Generated {len(clip_paths)} AI-animated clips")
+
+        # Unload model to free memory
+        self.video_gen.unload_model()
+
+        return clip_paths

@@ -15,12 +15,14 @@ import torch
 import requests
 from PIL import Image
 from diffusers import (
+    FluxPipeline,
     StableDiffusionXLPipeline,
     DPMSolverMultistepScheduler,
     EulerAncestralDiscreteScheduler
 )
 from tqdm import tqdm
 from huggingface_hub import snapshot_download
+from transformers import CLIPTextModel, CLIPTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +37,14 @@ class ImageGenerator:
 
     def __init__(
         self,
-        model_name: str = "sd-blue/sdxl-lightning-4step",
+        model_name: str = "black-forest-labs/FLUX.1-schnell",
         device: Optional[str] = None,
         use_api: bool = False,
         api_key: Optional[str] = None,
         api_provider: str = "zai",
         use_torch_compile: bool = True,
-        cache_dir: str = None
+        cache_dir: str = None,
+        model_type: str = "auto"
     ):
         """
         Initialize the image generator.
@@ -54,6 +57,7 @@ class ImageGenerator:
             api_provider: "zai" for Z.AI image generation
             use_torch_compile: Enable torch.compile for faster inference (CUDA only)
             cache_dir: Custom cache directory for models
+            model_type: "auto", "flux", "sdxl", or "sdt3"
         """
         self.model_name = model_name
         self.device = self._detect_device(device)
@@ -64,6 +68,7 @@ class ImageGenerator:
         self.use_torch_compile = use_torch_compile and self.device == "cuda"
         self.cache_dir = cache_dir or os.path.join(os.getcwd(), "models", "cached")
         self.model_loaded = False
+        self.model_type = self._detect_model_type(model_name, model_type)
 
         # Ensure cache directory exists
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -72,6 +77,8 @@ class ImageGenerator:
         os.environ['HUGGINGFACE_HUB_CACHE'] = self.cache_dir
 
         self._load_config()
+
+        logger.info(f"ImageGenerator initialized with model: {model_name} (type: {self.model_type})")
 
         if not use_api:
             # Check CUDA availability
@@ -84,6 +91,30 @@ class ImageGenerator:
                     logger.info(f"Using GPU: {gpu_name}")
         else:
             logger.info(f"Using {api_provider.upper()} API for image generation")
+
+    def _detect_model_type(self, model_name: str, model_type: str) -> str:
+        """
+        Detect the model type for pipeline selection.
+
+        Args:
+            model_name: Model name or path
+            model_type: Explicit model type or "auto" to detect
+
+        Returns:
+            str: "flux", "sdxl", or "sdt3"
+        """
+        if model_type != "auto":
+            return model_type.lower()
+
+        model_name_lower = model_name.lower()
+
+        if "flux" in model_name_lower:
+            return "flux"
+        elif "sdt3" in model_name_lower or "sd3" in model_name_lower:
+            return "sdt3"
+        else:
+            # Default to SDXL for stability
+            return "sdxl"
 
     def _detect_device(self, device: Optional[str]) -> str:
         """Auto-detect the best available device."""
@@ -98,14 +129,37 @@ class ImageGenerator:
         """Load configuration from settings file."""
         config_path = "config/settings.yaml"
 
-        default_config = {
-            "image_steps": 4,  # SDXL Lightning uses 4 steps
-            "image_cfg_scale": 0.0,  # Lightning uses 0 CFG scale
-            "image_resolution": [768, 1024],
+        # Default configs per model type
+        default_configs = {
+            "flux": {
+                "image_steps": 4,
+                "image_cfg_scale": 0.0,
+                "image_resolution": [768, 1024],
+                "guidance": 0.0,
+                "max_sequence_length": 256
+            },
+            "sdxl": {
+                "image_steps": 4,
+                "image_cfg_scale": 0.0,
+                "image_resolution": [768, 1024],
+                "guidance": 0.0
+            },
+            "sdt3": {
+                "image_steps": 28,
+                "image_cfg_scale": 7.0,
+                "image_resolution": [1024, 1024],
+                "guidance": 7.0
+            }
+        }
+
+        base_config = {
             "use_consistent_seed": True,
             "base_seed": 42,
             "use_torch_compile": True
         }
+
+        # Get default for current model type
+        default_config = {**base_config, **default_configs.get(self.model_type, default_configs["sdxl"])}
 
         if os.path.exists(config_path):
             import yaml
@@ -113,22 +167,26 @@ class ImageGenerator:
                 config = yaml.safe_load(f)
                 self.steps = config.get("image_steps", default_config["image_steps"])
                 self.cfg_scale = config.get("image_cfg_scale", default_config["image_cfg_scale"])
+                self.guidance = config.get("guidance", default_config.get("guidance", self.cfg_scale))
                 self.resolution = tuple(config.get("image_resolution", default_config["image_resolution"]))
                 self.use_consistent_seed = config.get("use_consistent_seed", default_config["use_consistent_seed"])
                 self.base_seed = config.get("base_seed", default_config["base_seed"])
+                self.max_sequence_length = config.get("max_sequence_length", default_config.get("max_sequence_length", 256))
         else:
             self.steps = default_config["image_steps"]
             self.cfg_scale = default_config["image_cfg_scale"]
+            self.guidance = default_config.get("guidance", self.cfg_scale)
             self.resolution = tuple(default_config["image_resolution"])
             self.use_consistent_seed = default_config["use_consistent_seed"]
             self.base_seed = default_config["base_seed"]
+            self.max_sequence_length = default_config.get("max_sequence_length", 256)
 
         if not self.use_api:
-            logger.info(f"Config: resolution={self.resolution}, steps={self.steps}, cfg={self.cfg_scale}")
+            logger.info(f"Config: model={self.model_type}, resolution={self.resolution}, steps={self.steps}, guidance={self.guidance}")
 
     def load_model(self) -> None:
         """
-        Load the Stable Diffusion model (for local generation only).
+        Load the appropriate model pipeline (Flux, SDXL, or SD3) for local generation.
 
         Uses model caching to avoid re-downloading. Enables torch.compile for speed.
         """
@@ -140,59 +198,26 @@ class ImageGenerator:
             logger.info("Model already loaded, skipping...")
             return
 
-        logger.info(f"Loading model: {self.model_name}")
+        logger.info(f"Loading model: {self.model_name} (type: {self.model_type})")
 
         try:
             # Check if model is cached locally
             local_model_path = self._get_cached_model_path()
 
-            # Load the pipeline
-            self.pipeline = StableDiffusionXLPipeline.from_pretrained(
-                local_model_path if local_model_path else self.model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                use_safetensors=True,
-                variant="fp16" if self.device == "cuda" else None,
-                cache_dir=self.cache_dir,
-                local_files_only=local_model_path is not None
-            )
+            model_path = local_model_path if local_model_path else self.model_name
+            dtype = torch.float16 if self.device == "cuda" else torch.float32
+            variant = "fp16" if self.device == "cuda" else None
 
-            # Set scheduler for Lightning (Euler Ancestral with specific settings)
-            self.pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(
-                self.pipeline.scheduler.config,
-                timestep_spacing="trailing"
-            )
-
-            # Move to device
-            self.pipeline = self.pipeline.to(self.device)
+            # Load the appropriate pipeline based on model type
+            if self.model_type == "flux":
+                self._load_flux_pipeline(model_path, dtype, variant)
+            elif self.model_type == "sdt3":
+                self._load_sdt3_pipeline(model_path, dtype, variant)
+            else:  # sdxl
+                self._load_sdxl_pipeline(model_path, dtype, variant)
 
             # Enable memory optimizations
-            if self.device == "cuda":
-                # Enable xformers if available
-                try:
-                    self.pipeline.enable_xformers_memory_efficient_attention()
-                    logger.info("xformers memory optimization enabled")
-                except Exception:
-                    logger.info("xformers not available, using default attention")
-
-                # Enable attention slicing for memory efficiency
-                self.pipeline.enable_attention_slicing()
-
-                # Enable VAE slicing to reduce memory
-                self.pipeline.enable_vae_slicing()
-
-                # Apply torch.compile for faster inference (2-3x speedup)
-                if self.use_torch_compile:
-                    try:
-                        logger.info("Applying torch.compile for faster inference...")
-                        # Compile only the UNet for best performance/memory tradeoff
-                        self.pipeline.unet = torch.compile(
-                            self.pipeline.unet,
-                            mode="reduce-overhead",
-                            fullgraph=False
-                        )
-                        logger.info("torch.compile applied successfully")
-                    except Exception as e:
-                        logger.warning(f"torch.compile failed: {e}. Continuing without compile.")
+            self._enable_memory_optimizations()
 
             self.model_loaded = True
             logger.info("Model loaded successfully")
@@ -200,6 +225,99 @@ class ImageGenerator:
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise
+
+    def _load_flux_pipeline(self, model_path: str, dtype: torch.dtype, variant: Optional[str]) -> None:
+        """Load Flux.1 pipeline."""
+        logger.info("Loading Flux.1 pipeline...")
+
+        self.pipeline = FluxPipeline.from_pretrained(
+            model_path,
+            torch_dtype=dtype,
+            use_safetensors=True,
+            cache_dir=self.cache_dir,
+            local_files_only=model_path != self.model_name
+        )
+
+        # Flux doesn't need scheduler changes
+        self.pipeline = self.pipeline.to(self.device)
+
+    def _load_sdxl_pipeline(self, model_path: str, dtype: torch.dtype, variant: Optional[str]) -> None:
+        """Load SDXL Lightning pipeline."""
+        logger.info("Loading SDXL Lightning pipeline...")
+
+        self.pipeline = StableDiffusionXLPipeline.from_pretrained(
+            model_path,
+            torch_dtype=dtype,
+            use_safetensors=True,
+            variant=variant,
+            cache_dir=self.cache_dir,
+            local_files_only=model_path != self.model_name
+        )
+
+        # Set scheduler for Lightning
+        self.pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(
+            self.pipeline.scheduler.config,
+            timestep_spacing="trailing"
+        )
+
+        self.pipeline = self.pipeline.to(self.device)
+
+    def _load_sdt3_pipeline(self, model_path: str, dtype: torch.dtype, variant: Optional[str]) -> None:
+        """Load Stable Diffusion 3 pipeline."""
+        logger.info("Loading Stable Diffusion 3 pipeline...")
+
+        from diffusers import StableDiffusion3Pipeline
+
+        self.pipeline = StableDiffusion3Pipeline.from_pretrained(
+            model_path,
+            torch_dtype=dtype,
+            use_safetensors=True,
+            variant=variant,
+            cache_dir=self.cache_dir,
+            local_files_only=model_path != self.model_name
+        )
+
+        self.pipeline = self.pipeline.to(self.device)
+
+    def _enable_memory_optimizations(self) -> None:
+        """Enable memory optimizations for CUDA."""
+        if self.device == "cuda":
+            # Enable xformers if available
+            try:
+                self.pipeline.enable_xformers_memory_efficient_attention()
+                logger.info("xformers memory optimization enabled")
+            except Exception:
+                logger.info("xformers not available, using default attention")
+
+            # Enable attention slicing for memory efficiency
+            self.pipeline.enable_attention_slicing()
+
+            # Enable VAE slicing to reduce memory
+            if hasattr(self.pipeline, 'enable_vae_slicing'):
+                self.pipeline.enable_vae_slicing()
+
+            # Apply torch.compile for faster inference (2-3x speedup)
+            if self.use_torch_compile:
+                try:
+                    logger.info("Applying torch.compile for faster inference...")
+                    # Compile only the transformer/unet for best performance/memory tradeoff
+                    if hasattr(self.pipeline, 'transformer'):
+                        # Flux uses transformer
+                        self.pipeline.transformer = torch.compile(
+                            self.pipeline.transformer,
+                            mode="reduce-overhead",
+                            fullgraph=False
+                        )
+                    elif hasattr(self.pipeline, 'unet'):
+                        # SDXL/SD3 use unet
+                        self.pipeline.unet = torch.compile(
+                            self.pipeline.unet,
+                            mode="reduce-overhead",
+                            fullgraph=False
+                        )
+                    logger.info("torch.compile applied successfully")
+                except Exception as e:
+                    logger.warning(f"torch.compile failed: {e}. Continuing without compile.")
 
     def _get_cached_model_path(self) -> Optional[str]:
         """
@@ -299,11 +417,11 @@ class ImageGenerator:
 
     def _generate_via_local(self, prompt: str, negative_prompt: str = "", seed: Optional[int] = None) -> Image.Image:
         """
-        Generate an image using local Stable Diffusion XL Lightning model.
+        Generate an image using local model (Flux, SDXL, or SD3).
 
         Args:
             prompt: Text description for image generation
-            negative_prompt: Things to avoid in the image (not used by Lightning)
+            negative_prompt: Things to avoid in the image (model-dependent)
             seed: Random seed for reproducibility
 
         Returns:
@@ -320,22 +438,51 @@ class ImageGenerator:
         if seed is not None:
             generator = torch.Generator(device=self.device).manual_seed(seed)
 
-        # For Lightning, we use a specific prompt format and no negative prompt
-        # Lightning is trained with 0 CFG scale, so we ignore negative_prompt
-        lightning_prompt = prompt
+        # Generate based on model type
+        logger.info(f"Generating locally ({self.model_type}, {self.steps}-step): {prompt[:50]}...")
 
-        # Generate
-        logger.info(f"Generating locally (Lightning 4-step): {prompt[:50]}...")
-        result = self.pipeline(
-            prompt=lightning_prompt,
+        if self.model_type == "flux":
+            result = self._generate_flux(prompt, seed, generator)
+        elif self.model_type == "sdt3":
+            result = self._generate_sdt3(prompt, negative_prompt, seed, generator)
+        else:  # sdxl
+            result = self._generate_sdxl(prompt, seed, generator)
+
+        return result.images[0] if hasattr(result, 'images') else result[0]
+
+    def _generate_flux(self, prompt: str, seed: Optional[int], generator: Optional[torch.Generator]):
+        """Generate with Flux pipeline."""
+        return self.pipeline(
+            prompt=prompt,
             num_inference_steps=self.steps,
-            guidance_scale=self.cfg_scale,  # 0 for Lightning
+            guidance=self.guidance,
             height=self.resolution[1],
             width=self.resolution[0],
             generator=generator
         )
 
-        return result.images[0]
+    def _generate_sdxl(self, prompt: str, seed: Optional[int], generator: Optional[torch.Generator]):
+        """Generate with SDXL pipeline."""
+        return self.pipeline(
+            prompt=prompt,
+            num_inference_steps=self.steps,
+            guidance_scale=self.guidance,
+            height=self.resolution[1],
+            width=self.resolution[0],
+            generator=generator
+        )
+
+    def _generate_sdt3(self, prompt: str, negative_prompt: str, seed: Optional[int], generator: Optional[torch.Generator]):
+        """Generate with SD3 pipeline."""
+        return self.pipeline(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=self.steps,
+            guidance_scale=self.guidance,
+            height=self.resolution[1],
+            width=self.resolution[0],
+            generator=generator
+        )
 
     def generate_scene_images(
         self,

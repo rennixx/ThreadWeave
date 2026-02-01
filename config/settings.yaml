@@ -15,19 +15,26 @@ scene_min_duration: 2.0
 scene_max_duration: 5.0
 
 # Image Generation
-image_model: "sd-blue/sdxl-lightning-4step"  # Faster 4-step model
-image_steps: 4  # SDXL Lightning uses 4 steps
-image_cfg_scale: 0.0  # Lightning uses 0 CFG scale
+# Available models: Flux.1-schnell (fastest), SDXL Lightning, Stable Diffusion 3
+image_model: "black-forest-labs/FLUX.1-schnell"  # State-of-the-art, fast 4-step model
+image_model_type: "auto"  # auto-detect or: flux, sdxl, sdt3
+image_steps: 4  # Steps for generation (Flux: 4, SD3: 28, SDXL: 4)
+image_cfg_scale: 0.0  # Guidance scale (Flux: 0.0, SD3: 7.0, SDXL: 0.0)
 image_resolution: [768, 1024]  # width, height
 use_consistent_seed: true
 base_seed: 42
 use_torch_compile: true  # Enable torch.compile for 2-3x speedup (CUDA only)
+max_sequence_length: 256  # For Flux prompt processing
 
 # Animation
 enable_camera_movements: true
 enable_frame_interpolation: true  # Enable frame interpolation for smoother animation
 interpolation_frames: 12  # Frames to interpolate between keyframes
 transition_duration: 0.5  # seconds
+
+# AI Animation (advanced - requires more VRAM and time)
+use_ai_animation: false  # Use AI models for true frame-by-frame animation
+ai_animation_model: "svd"  # Options: "svd" (Stable Video Diffusion), "animatediff"
 
 # Audio
 audio_volume_narration: 0  # dB

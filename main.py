@@ -267,11 +267,13 @@ def main(
         # Use Z.AI API if key is available, otherwise use local model
         use_api_images = config.get('ZAI_KEY') is not None
         image_gen = ImageGenerator(
-            model_name="stabilityai/sdxl-turbo",
+            model_name=config.get('image_model', 'black-forest-labs/FLUX.1-schnell'),
+            model_type=config.get('image_model_type', 'auto'),
             device="cuda",  # Will auto-detect if CUDA not available
             use_api=use_api_images,
             api_key=config.get('ZAI_KEY'),
-            api_provider="zai"
+            api_provider="zai",
+            use_torch_compile=config.get('use_torch_compile', True)
         )
 
         if use_api_images:
@@ -291,18 +293,29 @@ def main(
         # Step 4: Create Animations
         print_step(4, total_steps, "Creating animations...")
 
-        # Check if interpolation is enabled
+        # Check animation mode
+        use_ai_animation = config.get("use_ai_animation", False)
+        ai_model = config.get("ai_animation_model", "svd")
         use_interpolation = config.get("enable_frame_interpolation", True)
 
         animator = Animator(
             fps=config['VIDEO_FPS'],
             resolution=config['RESOLUTION'],
-            enable_interpolation=use_interpolation
+            enable_interpolation=use_interpolation,
+            ai_model=ai_model,
+            use_ai=use_ai_animation
         )
 
         clips_dir = f"output/clips/{thread_id}"
 
-        if use_interpolation:
+        if use_ai_animation:
+            print(f"  Using AI model ({ai_model}) for frame-by-frame animation")
+            clip_paths = animator.animate_scenes_with_ai(
+                scene_script,
+                image_paths,
+                output_dir=clips_dir
+            )
+        elif use_interpolation:
             print(f"  Using frame interpolation for smoother animation")
             clip_paths = animator.animate_scenes_with_interpolation(
                 scene_script,
