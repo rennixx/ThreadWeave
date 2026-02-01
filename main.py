@@ -348,7 +348,7 @@ def main(
 
     except Exception as e:
         logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
-        print(f"\n❌ Pipeline failed: {str(e)}")
+        print(f"\n[ERROR] Pipeline failed: {str(e)}")
         raise
 
 
