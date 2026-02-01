@@ -111,7 +111,7 @@ def validate_config(config: dict) -> None:
 
 def print_step(step: int, total: int, message: str) -> None:
     """Print a pipeline step indicator."""
-    print(f"\n📍 Step {step}/{total}: {message}")
+    print(f"\n[Step {step}/{total}]: {message}")
     print("=" * 60)
 
 
