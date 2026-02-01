@@ -66,6 +66,17 @@ def load_config():
             config['BACKGROUND_MUSIC'] = settings.get("background_music_path", "assets/background_music/default.mp3")
             config['OLLAMA_BASE_URL'] = settings.get("ollama_base_url", "http://localhost:11434")
             config['OLLAMA_MODEL'] = settings.get("ollama_model", "kimi-k2.5")
+            # Image generation settings
+            config['image_model'] = settings.get("image_model", "sd-blue/sdxl-lightning-4step")
+            config['image_model_type'] = settings.get("image_model_type", "auto")
+            config['image_steps'] = settings.get("image_steps", 4)
+            config['image_cfg_scale'] = settings.get("image_cfg_scale", 0.0)
+            config['use_torch_compile'] = settings.get("use_torch_compile", True)
+            # Animation settings
+            config['enable_frame_interpolation'] = settings.get("enable_frame_interpolation", True)
+            config['interpolation_frames'] = settings.get("interpolation_frames", 12)
+            config['use_ai_animation'] = settings.get("use_ai_animation", False)
+            config['ai_animation_model'] = settings.get("ai_animation_model", "svd")
     else:
         # Defaults (use local options)
         config['ART_STYLE'] = "minimalist geometric"
@@ -77,6 +88,17 @@ def load_config():
         config['BACKGROUND_MUSIC'] = "assets/background_music/default.mp3"
         config['OLLAMA_BASE_URL'] = "http://localhost:11434"
         config['OLLAMA_MODEL'] = "kimi-k2.5"
+        # Image generation defaults
+        config['image_model'] = "sd-blue/sdxl-lightning-4step"
+        config['image_model_type'] = "auto"
+        config['image_steps'] = 4
+        config['image_cfg_scale'] = 0.0
+        config['use_torch_compile'] = True
+        # Animation defaults
+        config['enable_frame_interpolation'] = True
+        config['interpolation_frames'] = 12
+        config['use_ai_animation'] = False
+        config['ai_animation_model'] = "svd"
 
     # Parse resolution
     width, height = map(int, config['OUTPUT_RESOLUTION'].split('x'))
