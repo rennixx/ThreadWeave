@@ -116,7 +116,8 @@ def print_step(step: int, total: int, message: str) -> None:
 
 
 def main(
-    thread_url: str,
+    thread_url: str = None,
+    thread_text: str = None,
     style: str = None,
     duration: int = None,
     output_dir: str = "output/final",
@@ -127,6 +128,7 @@ def main(
 
     Args:
         thread_url: URL of the Twitter thread to convert
+        thread_text: Direct thread text (bypasses scraping)
         style: Optional art style override
         duration: Target video duration in seconds
         output_dir: Directory to save final video
@@ -154,7 +156,11 @@ def main(
     else:
         config['DURATION'] = config.get('DEFAULT_DURATION', 30)
 
-    print(f"Thread URL: {thread_url}")
+    # Validate input
+    if not thread_url and not thread_text:
+        raise ValueError("Either thread_url or thread_text must be provided")
+
+    print(f"Thread URL: {thread_url or 'N/A (using manual text)'}")
     print(f"Target Duration: {config['DURATION']}s")
     print(f"Art Style: {config['ART_STYLE']}")
     print(f"Output Resolution: {config['OUTPUT_RESOLUTION']}")
@@ -175,22 +181,40 @@ def main(
     thread_id = None
 
     try:
-        # Step 1: Scrape Thread
-        print_step(1, total_steps, "Scraping thread...")
+        # Step 1: Scrape Thread or use provided text
+        if thread_text:
+            print_step(1, total_steps, "Using provided thread text...")
+            thread_id = f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            thread_data = {
+                "thread_id": thread_id,
+                "author": "manual",
+                "created_at": datetime.now().isoformat(),
+                "tweet_count": 1,
+                "tweets": [
+                    {
+                        "order": 1,
+                        "id": thread_id,
+                        "text": thread_text,
+                        "original_text": thread_text
+                    }
+                ],
+                "combined_text": thread_text
+            }
+            print(f"  [OK] Using manual text input ({len(thread_text)} characters)")
+        else:
+            print_step(1, total_steps, "Scraping thread...")
+            scraper = ThreadScraper(bearer_token=config['TWITTER_TOKEN'])
+            thread_data = scraper.extract_thread(thread_url)
+            thread_id = thread_data.get('thread_id', 'unknown')
+            logger.info(f"Thread ID: {thread_id}")
+            logger.info(f"Author: {thread_data.get('author', 'unknown')}")
+            logger.info(f"Tweet count: {thread_data.get('tweet_count', 0)}")
 
-        scraper = ThreadScraper(bearer_token=config['TWITTER_TOKEN'])
-        thread_data = scraper.extract_thread(thread_url)
+            # Save thread data
+            thread_path = f"output/threads/{thread_id}.json"
+            scraper.save_thread(thread_data, thread_path)
 
-        thread_id = thread_data.get('thread_id', 'unknown')
-        logger.info(f"Thread ID: {thread_id}")
-        logger.info(f"Author: {thread_data.get('author', 'unknown')}")
-        logger.info(f"Tweet count: {thread_data.get('tweet_count', 0)}")
-
-        # Save thread data
-        thread_path = f"output/threads/{thread_id}.json"
-        scraper.save_thread(thread_data, thread_path)
-
-        print(f"  [OK] Extracted {thread_data.get('tweet_count', 0)} tweets from {thread_data.get('author', 'unknown')}")
+            print(f"  [OK] Extracted {thread_data.get('tweet_count', 0)} tweets from {thread_data.get('author', 'unknown')}")
 
         # Step 2: Generate Scene Script
         print_step(2, total_steps, "Generating scene script...")
@@ -361,11 +385,12 @@ Examples:
   python main.py "https://twitter.com/user/status/123456789"
   python main.py "https://twitter.com/user/status/123456789" --style "watercolor painting"
   python main.py "https://twitter.com/user/status/123456789" --duration 60 --verbose
+  python main.py --text "Your thread text here..." --style "pixel art"
 
 Environment variables (.env file):
-  OPENAI_API_KEY         Required for scene generation and TTS
+  OPENAI_API_KEY         Required for scene generation (or use Ollama)
   ANTHROPIC_API_KEY      Alternative to OPENAI_API_KEY
-  TWITTER_BEARER_TOKEN   Required for thread scraping
+  TWITTER_BEARER_TOKEN   Optional: for thread scraping (or use --text)
   ELEVENLABS_API_KEY     Optional: alternative TTS provider
         """
     )
@@ -373,7 +398,15 @@ Environment variables (.env file):
     parser.add_argument(
         "thread_url",
         type=str,
+        nargs='?',
+        default=None,
         help="URL of the Twitter thread"
+    )
+    parser.add_argument(
+        "--text",
+        type=str,
+        default=None,
+        help="Direct thread text (bypasses scraping)"
     )
     parser.add_argument(
         "--style",
@@ -403,7 +436,8 @@ Environment variables (.env file):
 
     try:
         output_path = main(
-            args.thread_url,
+            thread_url=args.thread_url,
+            thread_text=args.text,
             style=args.style,
             duration=args.duration,
             output_dir=args.output_dir,

@@ -42,4 +42,4 @@ enable_xformers: true
 
 # Local LLM (Ollama)
 ollama_base_url: http://localhost:11434
-ollama_model: kimi-k2.5
+ollama_model: ministral-3
