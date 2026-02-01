@@ -230,7 +230,7 @@ def main(
         script_path = f"output/scripts/{thread_id}_script.json"
         scene_gen.save_script(scene_script, script_path)
 
-        print(f"  ✅ Generated {scene_script['metadata']['scene_count']} scenes")
+        print(f"  [OK] Generated {scene_script['metadata']['scene_count']} scenes")
 
         # Step 3: Generate Images
         print_step(3, total_steps, "Generating scene images...")
@@ -249,7 +249,7 @@ def main(
         # Unload model to free memory
         image_gen.unload_model()
 
-        print(f"  ✅ Generated {len(image_paths)} images")
+        print(f"  [OK] Generated {len(image_paths)} images")
 
         # Step 4: Create Animations
         print_step(4, total_steps, "Creating animations...")
@@ -266,7 +266,7 @@ def main(
             output_dir=clips_dir
         )
 
-        print(f"  ✅ Created {len(clip_paths)} animated clips")
+        print(f"  [OK] Created {len(clip_paths)} animated clips")
 
         # Step 5: Generate Audio
         print_step(5, total_steps, "Generating audio...")
@@ -305,7 +305,7 @@ def main(
             import shutil
             shutil.copy(narration_path, final_audio_path)
 
-        print(f"  ✅ Generated audio track")
+        print(f"  [OK] Generated audio track")
 
         # Step 6: Assemble Final Video
         print_step(6, total_steps, "Assembling final video...")
