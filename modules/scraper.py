@@ -200,7 +200,7 @@ class ThreadScraper:
                     "combined_text": combined_text
                 }
 
-            except tweepy.Errors.TooManyRequests as e:
+            except tweepy.errors.TooManyRequests as e:
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (2 ** attempt)
                     logger.warning(f"Rate limited. Waiting {wait_time}s...")
@@ -208,10 +208,10 @@ class ThreadScraper:
                 else:
                     raise RuntimeError("Rate limit exceeded. Please try again later.")
 
-            except tweepy.Errors.Forbidden as e:
+            except tweepy.errors.Forbidden as e:
                 raise RuntimeError(f"Access forbidden. Check API credentials: {e}")
 
-            except tweepy.Errors.NotFound:
+            except tweepy.errors.NotFound:
                 raise RuntimeError(f"Tweet {tweet_id} not found (may be deleted or private)")
 
             except Exception as e:
